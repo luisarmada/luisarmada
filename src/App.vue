@@ -74,5 +74,6 @@ nav a:not(.router-link-exact-active):hover {
   color: #111;
   text-decoration: underline;
   text-decoration-color: rgba(0, 0, 0, 0.35);
+  text-underline-offset: 5px;
 }
 </style>
