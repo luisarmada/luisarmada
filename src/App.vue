@@ -13,7 +13,7 @@
 </template>
 
 <script setup>
-const nav = ['profile', 'projects', 'posts', 'photos']
+const nav = ['profile', 'projects', 'posts', 'photos', 'plus']
 </script>
 
 <style scoped>

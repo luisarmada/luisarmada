@@ -4,6 +4,7 @@ import Profile from './views/Profile.vue'
 import Projects from './views/Projects.vue'
 import Posts from './views/Posts.vue'
 import Photos from './views/Photos.vue'
+import Plus from './views/Plus.vue'
 
 export default createRouter({
   history: createWebHistory(),
@@ -13,5 +14,6 @@ export default createRouter({
     { path: '/projects', component: Projects },
     { path: '/posts', component: Posts },
     { path: '/photos', component: Photos },
+    { path: '/plus', component: Plus },
   ],
 })
