@@ -29,6 +29,8 @@
         <p class="lightbox-date">{{ formatDate(selected.date) }}</p>
         <p v-if="selected.caption" class="lightbox-caption">{{ selected.caption }}</p>
         <button class="close" @click="selected = null">✕</button>
+        <button v-if="prevPhoto" class="nav-btn prev" @click="selected = prevPhoto">‹</button>
+        <button v-if="nextPhoto" class="nav-btn next" @click="selected = nextPhoto">›</button>
       </div>
     </div>
   </div>
@@ -118,6 +120,18 @@ function isToday(date) {
 function open(photo) {
   selected.value = photo
 }
+
+const selectedIndex = computed(() =>
+  photos.value.findIndex(p => p.id === selected.value?.id)
+)
+
+const prevPhoto = computed(() =>
+  selectedIndex.value > 0 ? photos.value[selectedIndex.value - 1] : null
+)
+
+const nextPhoto = computed(() =>
+  selectedIndex.value < photos.value.length - 1 ? photos.value[selectedIndex.value + 1] : null
+)
 </script>
 
 <style scoped>
@@ -255,6 +269,24 @@ function open(photo) {
 }
 
 .close:hover { color: #000; }
+
+.nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #888;
+  font-family: inherit;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.nav-btn:hover { color: #000; }
+.nav-btn.prev { left: -1.5rem; }
+.nav-btn.next { right: -1.5rem; }
 
 .muted { font-size: 0.9rem; color: #aaa; }
 </style>
