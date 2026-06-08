@@ -43,7 +43,14 @@
         <input v-model="photo.date" type="date" required />
         <input v-model="photo.caption" type="text" placeholder="caption (optional)" />
         <input type="file" accept="image/*" @change="onFile" required />
-        <button type="submit" :disabled="uploading">{{ uploading ? 'uploading...' : 'save photo' }}</button>
+        <div v-if="duplicateWarning" class="duplicate">
+          <p>a photo already exists for this date. replace it?</p>
+          <div class="duplicate-actions">
+            <button type="button" @click="confirmReplace">replace</button>
+            <button type="button" class="cancel" @click="duplicateWarning = false">cancel</button>
+          </div>
+        </div>
+        <button v-else type="submit" :disabled="uploading">{{ uploading ? 'uploading...' : 'save photo' }}</button>
         <p v-if="photoMsg" class="msg">{{ photoMsg }}</p>
       </form>
     </template>
@@ -100,6 +107,8 @@ const uploading = ref(false)
 const photoMsg = ref('')
 const photo = ref({ date: '', caption: '' })
 const photoFile = ref(null)
+const duplicateWarning = ref(false)
+const existingPhoto = ref(null)
 
 function onFile(e) {
   photoFile.value = e.target.files[0]
@@ -107,6 +116,24 @@ function onFile(e) {
 
 async function submitPhoto() {
   if (!photoFile.value) return
+  photoMsg.value = ''
+
+  const { data } = await supabase.from('photos').select('id').eq('date', photo.value.date).single()
+  if (data) {
+    existingPhoto.value = data
+    duplicateWarning.value = true
+    return
+  }
+
+  await uploadPhoto(false)
+}
+
+async function confirmReplace() {
+  duplicateWarning.value = false
+  await uploadPhoto(true)
+}
+
+async function uploadPhoto(replace) {
   uploading.value = true
   photoMsg.value = ''
 
@@ -125,17 +152,26 @@ async function submitPhoto() {
 
   const { data: urlData } = supabase.storage.from('photos').getPublicUrl(path)
 
-  const { error: dbErr } = await supabase.from('photos').insert([{
-    date: photo.value.date,
-    caption: photo.value.caption,
-    url: urlData.publicUrl,
-  }])
+  let dbErr
+  if (replace && existingPhoto.value) {
+    ;({ error: dbErr } = await supabase.from('photos').update({
+      url: urlData.publicUrl,
+      caption: photo.value.caption,
+    }).eq('id', existingPhoto.value.id))
+  } else {
+    ;({ error: dbErr } = await supabase.from('photos').insert([{
+      date: photo.value.date,
+      caption: photo.value.caption,
+      url: urlData.publicUrl,
+    }]))
+  }
 
   if (dbErr) photoMsg.value = `db error: ${dbErr.message}`
   else {
     photoMsg.value = 'saved!'
     photo.value = { date: '', caption: '' }
     photoFile.value = null
+    existingPhoto.value = null
   }
   uploading.value = false
 }
@@ -233,4 +269,37 @@ button[type="submit"]:disabled, .login button:disabled {
 
 .msg { font-size: 0.85rem; color: #888; }
 .error { font-size: 0.85rem; color: #c00; }
+
+.duplicate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.duplicate p {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.duplicate-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.duplicate-actions button {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  background: #000;
+  color: #fff;
+}
+
+.duplicate-actions button.cancel {
+  background: #f0f0f0;
+  color: #555;
+}
 </style>

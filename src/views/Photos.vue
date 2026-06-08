@@ -26,6 +26,7 @@
     <div class="lightbox" v-if="selected" @click.self="selected = null">
       <div class="lightbox-inner">
         <img :src="selected.url" />
+        <p class="lightbox-date">{{ formatDate(selected.date) }}</p>
         <p v-if="selected.caption" class="lightbox-caption">{{ selected.caption }}</p>
         <button class="close" @click="selected = null">✕</button>
       </div>
@@ -88,6 +89,10 @@ function cells(year, month) {
 
 function label(year, month) {
   return new Date(year, month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+}
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function isToday(date) {
@@ -204,6 +209,12 @@ function open(photo) {
 .lightbox-inner img {
   width: 100%;
   border-radius: 4px;
+}
+
+.lightbox-date {
+  font-size: 0.8rem;
+  color: #aaa;
+  text-align: center;
 }
 
 .lightbox-caption {
