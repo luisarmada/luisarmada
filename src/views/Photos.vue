@@ -176,6 +176,10 @@ function open(photo) {
   border-color: transparent;
 }
 
+.cell.has-photo:hover {
+  border-color: rgba(0, 0, 0, 0.5);
+}
+
 
 .day-num {
   font-size: 0.65rem;
