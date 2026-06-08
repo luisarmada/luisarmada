@@ -15,7 +15,7 @@
           >
             <template v-if="cell">
               <span class="day-num">{{ cell.getDate() }}</span>
-              <img v-if="photoFor(cell)" :src="photoFor(cell).url" class="thumb" />
+              <img v-if="photoFor(cell)" :src="photoFor(cell).thumb_url || photoFor(cell).url" class="thumb" loading="lazy" />
             </template>
           </div>
         </div>
@@ -25,7 +25,7 @@
 
     <div class="lightbox" v-if="selected" @click.self="selected = null">
       <div class="lightbox-inner">
-        <img :src="selected.url" />
+        <img :src="selected.url" loading="lazy" />
         <p class="lightbox-date">{{ formatDate(selected.date) }}</p>
         <p v-if="selected.caption" class="lightbox-caption">{{ selected.caption }}</p>
         <button class="close" @click="selected = null">✕</button>
@@ -39,6 +39,7 @@ import { ref, computed, onMounted } from 'vue'
 import { supabase } from '../supabase.js'
 
 const today = new Date()
+const todayStr = today.toDateString()
 const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 const photos = ref([])
@@ -54,9 +55,15 @@ onMounted(async () => {
   loading.value = false
 })
 
+// O(1) lookup map instead of .find() per cell per render
+const photoMap = computed(() => {
+  const map = {}
+  for (const p of photos.value) map[p.date] = p
+  return map
+})
+
 function photoFor(date) {
-  const k = key(date)
-  return photos.value.find(p => p.date === k) || null
+  return photoMap.value[key(date)] || null
 }
 
 function key(date) {
@@ -76,15 +83,24 @@ const months = computed(() => {
   return result.reverse()
 })
 
+// precomputed per month, not recalculated on every render
+const cellsMap = computed(() => {
+  const map = {}
+  for (const { year, month } of months.value) {
+    const first = new Date(year, month, 1)
+    const last = new Date(year, month + 1, 0)
+    const offset = (first.getDay() + 6) % 7
+    const days = []
+    for (let i = 0; i < offset; i++) days.push(null)
+    for (let d = 1; d <= last.getDate(); d++) days.push(new Date(year, month, d))
+    while (days.length % 7 !== 0) days.push(null)
+    map[`${year}-${month}`] = days
+  }
+  return map
+})
+
 function cells(year, month) {
-  const first = new Date(year, month, 1)
-  const last = new Date(year, month + 1, 0)
-  const offset = (first.getDay() + 6) % 7
-  const days = []
-  for (let i = 0; i < offset; i++) days.push(null)
-  for (let d = 1; d <= last.getDate(); d++) days.push(new Date(year, month, d))
-  while (days.length % 7 !== 0) days.push(null)
-  return days
+  return cellsMap.value[`${year}-${month}`] || []
 }
 
 function label(year, month) {
@@ -96,7 +112,7 @@ function formatDate(d) {
 }
 
 function isToday(date) {
-  return date.toDateString() === today.toDateString()
+  return date.toDateString() === todayStr
 }
 
 function open(photo) {
@@ -157,11 +173,9 @@ function open(photo) {
 
 .cell.has-photo {
   cursor: pointer;
+  border-color: transparent;
 }
 
-.cell.has-photo:hover {
-  border-color: rgba(0, 0, 0, 0.5);
-}
 
 .day-num {
   font-size: 0.65rem;

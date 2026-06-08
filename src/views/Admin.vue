@@ -115,6 +115,23 @@ function onFile(e) {
   photoFile.value = e.target.files[0]
 }
 
+function resizeImage(file, maxWidth, quality) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width)
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width * scale
+      canvas.height = img.height * scale
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(resolve, 'image/jpeg', quality)
+    }
+    img.src = url
+  })
+}
+
 async function submitPhoto() {
   if (!photoFile.value) return
   photoMsg.value = ''
@@ -138,25 +155,34 @@ async function uploadPhoto(replace) {
   uploading.value = true
   photoMsg.value = ''
 
-  const ext = photoFile.value.name.split('.').pop()
-  const path = `${photo.value.date}-${Date.now()}.${ext}`
+  const ts = Date.now()
+  const [full, thumb] = await Promise.all([
+    resizeImage(photoFile.value, 1200, 0.85),
+    resizeImage(photoFile.value, 200, 0.7),
+  ])
 
-  const { error: uploadErr } = await supabase.storage
-    .from('photos')
-    .upload(path, photoFile.value, { upsert: true })
+  const fullPath = `${photo.value.date}-${ts}.jpg`
+  const thumbPath = `${photo.value.date}-${ts}-thumb.jpg`
 
-  if (uploadErr) {
-    photoMsg.value = `upload error: ${uploadErr.message}`
+  const [fullUpload, thumbUpload] = await Promise.all([
+    supabase.storage.from('photos').upload(fullPath, full, { upsert: true, contentType: 'image/jpeg' }),
+    supabase.storage.from('photos').upload(thumbPath, thumb, { upsert: true, contentType: 'image/jpeg' }),
+  ])
+
+  if (fullUpload.error || thumbUpload.error) {
+    photoMsg.value = `upload error: ${(fullUpload.error || thumbUpload.error).message}`
     uploading.value = false
     return
   }
 
-  const { data: urlData } = supabase.storage.from('photos').getPublicUrl(path)
+  const { data: urlData } = supabase.storage.from('photos').getPublicUrl(fullPath)
+  const { data: thumbUrlData } = supabase.storage.from('photos').getPublicUrl(thumbPath)
 
   let dbErr
   if (replace && existingPhoto.value) {
     ;({ error: dbErr } = await supabase.from('photos').update({
       url: urlData.publicUrl,
+      thumb_url: thumbUrlData.publicUrl,
       caption: photo.value.caption,
     }).eq('id', existingPhoto.value.id))
   } else {
@@ -164,6 +190,7 @@ async function uploadPhoto(replace) {
       date: photo.value.date,
       caption: photo.value.caption,
       url: urlData.publicUrl,
+      thumb_url: thumbUrlData.publicUrl,
     }]))
   }
 
