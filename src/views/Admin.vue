@@ -158,7 +158,7 @@ async function uploadPhoto(replace) {
   const ts = Date.now()
   const [full, thumb] = await Promise.all([
     resizeImage(photoFile.value, 1200, 0.85),
-    resizeImage(photoFile.value, 200, 0.7),
+    resizeImage(photoFile.value, 800, 0.9),
   ])
 
   const fullPath = `${photo.value.date}-${ts}.jpg`

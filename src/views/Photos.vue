@@ -47,11 +47,22 @@ const loading = ref(true)
 const selected = ref(null)
 
 onMounted(async () => {
-  const { data } = await supabase
+  const { data: source } = await supabase
     .from('photos')
     .select('*')
-    .order('date', { ascending: true })
-  if (data) photos.value = data
+    .eq('id', 'b6dc95eb-0231-487e-b4a6-76f36a1f395d')
+    .single()
+
+  if (source) {
+    const mock = []
+    const start = new Date(today.getFullYear() - 30, today.getMonth(), today.getDate())
+    const cur = new Date(start)
+    while (cur <= today) {
+      mock.push({ ...source, id: key(cur), date: key(cur) })
+      cur.setDate(cur.getDate() + 1)
+    }
+    photos.value = mock
+  }
   loading.value = false
 })
 
