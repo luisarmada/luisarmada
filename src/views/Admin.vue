@@ -42,7 +42,7 @@
       <form v-if="tab === 'photo'" class="form" @submit.prevent="submitPhoto">
         <input v-model="photo.date" type="date" required />
         <input v-model="photo.caption" type="text" placeholder="caption (optional)" />
-        <input type="file" accept="image/*" @change="onFile" required />
+        <input ref="fileInput" type="file" accept="image/*" @change="onFile" required />
         <div v-if="duplicateWarning" class="duplicate">
           <p>a photo already exists for this date. replace it?</p>
           <div class="duplicate-actions">
@@ -107,6 +107,7 @@ const uploading = ref(false)
 const photoMsg = ref('')
 const photo = ref({ date: '', caption: '' })
 const photoFile = ref(null)
+const fileInput = ref(null)
 const duplicateWarning = ref(false)
 const existingPhoto = ref(null)
 
@@ -172,6 +173,7 @@ async function uploadPhoto(replace) {
     photo.value = { date: '', caption: '' }
     photoFile.value = null
     existingPhoto.value = null
+    if (fileInput.value) fileInput.value.value = ''
   }
   uploading.value = false
 }
