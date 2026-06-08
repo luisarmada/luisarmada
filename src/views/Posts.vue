@@ -3,7 +3,7 @@
     <div class="tags">
       <span class="tags-label">tags:</span>
       <button
-        v-for="tag in ['all', ...tags]"
+        v-for="tag in ['all', ...availableTags]"
         :key="tag"
         class="tag"
         :class="[tag, { active: activeTag === tag }]"
@@ -11,61 +11,50 @@
       >{{ tag }}</button>
     </div>
 
-    <div class="posts">
-      <div v-for="post in filtered" :key="post.title" class="post">
+    <div v-if="loading" class="muted">loading...</div>
+    <div v-else-if="error" class="muted">failed to load posts.</div>
+    <div v-else class="posts">
+      <div v-for="post in filtered" :key="post.id" class="post">
         <div class="post-header">
           <span class="post-title">{{ post.title }}</span>
-          <span class="post-date">{{ post.date }}</span>
+          <span class="post-date">{{ formatDate(post.date) }}</span>
           <span class="post-tag" :class="post.tag">{{ post.tag }}</span>
         </div>
-        <p class="post-desc">{{ post.desc }}</p>
+        <p class="post-desc">{{ post.description }}</p>
       </div>
+      <p v-if="filtered.length === 0" class="muted">no posts yet.</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '../supabase.js'
 
-const tags = ['quant', 'coding', 'review']
+const posts = ref([])
+const loading = ref(true)
+const error = ref(false)
 const activeTag = ref('all')
 
-const posts = [
-  {
-    title: 'Getting started with quantitative finance',
-    date: 'May 2025',
-    tag: 'quant',
-    desc: 'A beginner-friendly look at the core concepts behind quant finance — pricing, risk, and why maths matters more than you think.',
-  },
-  {
-    title: 'Building a REST API with Spring Boot',
-    date: 'Mar 2025',
-    tag: 'coding',
-    desc: 'A walkthrough of setting up a clean, testable REST API in Spring Boot, with dependency injection and proper error handling.',
-  },
-  {
-    title: 'Review: The Man from the Future (John von Neumann biography)',
-    date: 'Jan 2025',
-    tag: 'review',
-    desc: 'Ananyo Bhattacharya\'s biography of von Neumann is a fascinating tour through one of the most remarkable minds of the 20th century.',
-  },
-  {
-    title: 'Stochastic calculus: a gentle introduction',
-    date: 'Nov 2024',
-    tag: 'quant',
-    desc: 'What is Brownian motion, and why does it show up everywhere in finance? A gentle introduction with as little pain as possible.',
-  },
-  {
-    title: 'Why I switched from React to Vue',
-    date: 'Sep 2024',
-    tag: 'coding',
-    desc: 'After years of React, I gave Vue a serious try. Here\'s what surprised me, what I miss, and what I\'ll never go back on.',
-  },
-]
+const availableTags = ['quant', 'coding', 'review']
 
 const filtered = computed(() =>
-  activeTag.value === 'all' ? posts : posts.filter(p => p.tag === activeTag.value)
+  activeTag.value === 'all' ? posts.value : posts.value.filter(p => p.tag === activeTag.value)
 )
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+onMounted(async () => {
+  const { data, error: err } = await supabase
+    .from('posts')
+    .select('*')
+    .order('date', { ascending: false })
+  if (err) { error.value = true }
+  else { posts.value = data }
+  loading.value = false
+})
 </script>
 
 <style scoped>
@@ -80,6 +69,7 @@ const filtered = computed(() =>
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .tag {
@@ -91,16 +81,15 @@ const filtered = computed(() =>
   background: #f0f0f0;
   color: #555;
   transition: opacity 0.15s;
+  font-family: inherit;
+  font-weight: 500;
 }
 
-.tag:hover {
-  opacity: 0.75;
-}
+.tag:hover { opacity: 0.75; }
 
 .tags-label {
   font-size: 0.85rem;
   color: #888;
-  align-self: center;
 }
 
 .tag.all { background: #e8e8e8; color: #444; }
@@ -108,10 +97,7 @@ const filtered = computed(() =>
 .tag.coding { background: #d6f0e0; color: #2a6644; }
 .tag.review { background: #f5dff5; color: #7a3d7a; }
 
-.tag.active {
-  border-color: currentColor;
-  opacity: 1;
-}
+.tag.active { border-color: currentColor; }
 
 .posts {
   display: flex;
@@ -136,9 +122,7 @@ const filtered = computed(() =>
   cursor: pointer;
 }
 
-.post-title:hover {
-  text-decoration-color: rgba(0, 0, 0, 0.7);
-}
+.post-title:hover { text-decoration-color: rgba(0, 0, 0, 0.7); }
 
 .post-date {
   font-size: 0.85rem;
@@ -163,4 +147,6 @@ const filtered = computed(() =>
 .post-tag.quant { background: #d4e8fb; color: #2a5f8a; }
 .post-tag.coding { background: #d6f0e0; color: #2a6644; }
 .post-tag.review { background: #f5dff5; color: #7a3d7a; }
+
+.muted { font-size: 0.9rem; color: #aaa; }
 </style>
