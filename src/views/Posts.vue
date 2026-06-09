@@ -3,13 +3,33 @@
     <div class="tags">
       <span class="tags-label">tags:</span>
       <button
-        v-for="tag in ['all', ...availableTags]"
-        :key="tag"
         class="tag"
-        :class="[tag, { active: activeTag === tag }]"
-        @click="activeTag = tag"
-      >{{ tag }}</button>
+        :class="{ active: activeTag === 'all' }"
+        :style="activeTag === 'all' ? {} : {}"
+        @click="activeTag = 'all'"
+      >all</button>
+      <button
+        v-for="t in availableTags"
+        :key="t.name"
+        class="tag"
+        :class="{ active: activeTag === t.name }"
+        :style="{ background: t.color + '22', color: t.color, borderColor: activeTag === t.name ? t.color : 'transparent' }"
+        @click="activeTag = t.name"
+      >{{ t.name }}</button>
     </div>
+
+    <form v-if="session" class="admin-form" @submit.prevent="submitPost">
+      <input v-model="newPost.title" type="text" placeholder="title" required />
+      <input v-model="newPost.description" type="text" placeholder="description" required />
+      <select v-model="newPost.tag" required>
+        <option value="" disabled>tag</option>
+        <option v-for="t in tags" :key="t.id" :value="t.name">{{ t.name }}</option>
+      </select>
+      <textarea v-model="newPost.body" placeholder="body" rows="4"></textarea>
+      <input v-model="newPost.date" type="date" required />
+      <button type="submit" :disabled="posting">{{ posting ? 'saving...' : 'add post' }}</button>
+      <p v-if="postMsg" class="form-msg">{{ postMsg }}</p>
+    </form>
 
     <div v-if="loading" class="muted">loading...</div>
     <div v-else-if="error" class="muted">failed to load posts.</div>
@@ -18,7 +38,7 @@
         <div class="post-header">
           <span class="post-title">{{ post.title }}</span>
           <span class="post-date">{{ formatDate(post.date) }}</span>
-          <span class="post-tag" :class="post.tag">{{ post.tag }}</span>
+          <span class="post-tag" :style="tagStyle(post.tag)">{{ post.tag }}</span>
         </div>
         <p class="post-desc">{{ post.description }}</p>
       </div>
@@ -30,29 +50,59 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { supabase } from '../supabase.js'
+import { useTags } from '../useTags.js'
+import { useAuth } from '../useAuth.js'
 
 const posts = ref([])
 const loading = ref(true)
 const error = ref(false)
 const activeTag = ref('all')
 
-const availableTags = ['quant', 'coding', 'review']
+const { session } = useAuth()
+const { tags } = useTags('posts')
+const availableTags = computed(() => tags.value.map(t => ({ name: t.name, color: t.color })))
 
 const filtered = computed(() =>
   activeTag.value === 'all' ? posts.value : posts.value.filter(p => p.tag === activeTag.value)
 )
 
+function tagStyle(name) {
+  const t = tags.value.find(t => t.name === name)
+  return t ? { background: t.color + '22', color: t.color } : {}
+}
+
 function formatDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
 }
 
-onMounted(async () => {
+const posting = ref(false)
+const postMsg = ref('')
+const newPost = ref({ title: '', description: '', tag: '', body: '', date: '' })
+
+async function submitPost() {
+  posting.value = true
+  postMsg.value = ''
+  const { error: err } = await supabase.from('posts').insert([{ ...newPost.value }])
+  if (err) postMsg.value = `error: ${err.message}`
+  else {
+    postMsg.value = 'saved!'
+    newPost.value = { title: '', description: '', tag: '', body: '', date: '' }
+    await loadPosts()
+  }
+  posting.value = false
+}
+
+async function loadPosts() {
   const { data, error: err } = await supabase
     .from('posts')
     .select('*')
     .order('date', { ascending: false })
-  if (err) { error.value = true }
-  else { posts.value = data }
+  if (err) error.value = true
+  else posts.value = data
+}
+
+onMounted(async () => {
+  await loadPosts()
   loading.value = false
 })
 </script>
@@ -149,4 +199,53 @@ onMounted(async () => {
 .post-tag.review { background: #f5dff5; color: #7a3d7a; }
 
 .muted { font-size: 0.9rem; color: #aaa; }
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.admin-form input:focus,
+.admin-form select:focus,
+.admin-form textarea:focus { border-color: rgba(0, 0, 0, 0.4); }
+
+.admin-form textarea { resize: vertical; }
+
+.admin-form button[type="submit"] {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.admin-form button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
+
+.form-msg { font-size: 0.8rem; color: #888; }
 </style>

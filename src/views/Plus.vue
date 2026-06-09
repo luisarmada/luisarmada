@@ -2,17 +2,32 @@
   <div class="page">
     <div class="tags">
       <span class="tags-label">tags:</span>
+      <button class="tag" :class="{ active: activeTag === 'all' }" @click="activeTag = 'all'">all</button>
       <button
-        v-for="tag in ['all', 'guitar', 'climbing']"
-        :key="tag"
+        v-for="t in availableTags"
+        :key="t.name"
         class="tag"
-        :class="[tag, { active: activeTag === tag }]"
-        @click="activeTag = tag"
-      >{{ tag }}</button>
+        :class="{ active: activeTag === t.name }"
+        :style="{ background: t.color + '22', color: t.color, borderColor: activeTag === t.name ? t.color : 'transparent' }"
+        @click="activeTag = t.name"
+      >{{ t.name }}</button>
     </div>
 
-    <div class="grid">
-      <div v-for="item in filtered" :key="item.shortcode" class="reel-card">
+    <form v-if="session" class="admin-form" @submit.prevent="submitReel">
+      <input v-model="newReel.shortcode" type="text" placeholder="instagram shortcode (e.g. DWhIavqjDfk)" required />
+      <input v-model="newReel.title" type="text" placeholder="title" required />
+      <select v-model="newReel.tag" required>
+        <option value="" disabled>tag</option>
+        <option v-for="t in tags" :key="t.id" :value="t.name">{{ t.name }}</option>
+      </select>
+      <input v-model="newReel.date" type="date" required />
+      <button type="submit" :disabled="reelSaving">{{ reelSaving ? 'saving...' : 'add reel' }}</button>
+      <p v-if="reelMsg" class="form-msg">{{ reelMsg }}</p>
+    </form>
+
+    <div v-if="loading" class="muted">loading...</div>
+    <div v-else class="grid">
+      <div v-for="item in filtered" :key="item.id" class="reel-card">
         <a :href="`https://www.instagram.com/reel/${item.shortcode}/`" target="_blank" class="reel-cover">
           <iframe
             :src="`https://www.instagram.com/reel/${item.shortcode}/embed/captioned/`"
@@ -26,38 +41,72 @@
         <div class="reel-footer">
           <span class="reel-title">{{ item.title }}</span>
           <div class="reel-meta">
-            <span class="reel-date">{{ item.date }}</span>
-            <span class="reel-tag" :class="item.tag">{{ item.tag }}</span>
+            <span class="reel-date">{{ formatDate(item.date) }}</span>
+            <span class="reel-tag" :style="tagStyle(item.tag)">{{ item.tag }}</span>
           </div>
         </div>
       </div>
+      <p v-if="filtered.length === 0" class="muted">no reels yet.</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { supabase } from '../supabase.js'
+import { useTags } from '../useTags.js'
+import { useAuth } from '../useAuth.js'
 
+const reels = ref([])
+const loading = ref(true)
 const activeTag = ref('all')
 
-const reels = [
-  {
-    shortcode: 'DWhIavqjDfk',
-    title: 'fingerstyle cover',
-    date: 'Jun 2025',
-    tag: 'guitar',
-  },
-  {
-    shortcode: 'DWwh29bDKYE',
-    title: 'outdoor bouldering session',
-    date: 'Jun 2025',
-    tag: 'climbing',
-  },
-]
+const { session } = useAuth()
+const { tags } = useTags('plus')
+const availableTags = computed(() => tags.value.map(t => ({ name: t.name, color: t.color })))
 
 const filtered = computed(() =>
-  activeTag.value === 'all' ? reels : reels.filter(r => r.tag === activeTag.value)
+  activeTag.value === 'all' ? reels.value : reels.value.filter(r => r.tag === activeTag.value)
 )
+
+function tagStyle(name) {
+  const t = tags.value.find(t => t.name === name)
+  return t ? { background: t.color + '22', color: t.color } : {}
+}
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+const reelSaving = ref(false)
+const reelMsg = ref('')
+const newReel = ref({ shortcode: '', title: '', tag: '', date: '' })
+
+async function submitReel() {
+  reelSaving.value = true
+  reelMsg.value = ''
+  const { error } = await supabase.from('plus').insert([{ ...newReel.value }])
+  if (error) reelMsg.value = `error: ${error.message}`
+  else {
+    reelMsg.value = 'saved!'
+    newReel.value = { shortcode: '', title: '', tag: '', date: '' }
+    await loadReels()
+  }
+  reelSaving.value = false
+}
+
+async function loadReels() {
+  const { data } = await supabase
+    .from('plus')
+    .select('*')
+    .order('date', { ascending: false })
+  if (data) reels.value = data
+}
+
+onMounted(async () => {
+  await loadReels()
+  loading.value = false
+})
 </script>
 
 <style scoped>
@@ -72,12 +121,12 @@ const filtered = computed(() =>
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .tags-label {
   font-size: 0.85rem;
   color: #888;
-  align-self: center;
 }
 
 .tag {
@@ -86,23 +135,14 @@ const filtered = computed(() =>
   border: 1px solid transparent;
   font-size: 0.85rem;
   cursor: pointer;
-  background: #f0f0f0;
-  color: #555;
-  transition: opacity 0.15s;
+  background: #e8e8e8;
+  color: #444;
+  font-family: inherit;
+  font-weight: 500;
 }
 
-.tag:hover {
-  opacity: 0.75;
-}
-
-.tag.all      { background: #e8e8e8; color: #444; }
-.tag.guitar   { background: #fde8d4; color: #8a4a2a; }
-.tag.climbing { background: #d6f0e0; color: #2a6644; }
-
-.tag.active {
-  border-color: currentColor;
-  opacity: 1;
-}
+.tag:hover { opacity: 0.75; }
+.tag.active { border-color: currentColor; }
 
 .grid {
   display: grid;
@@ -148,7 +188,6 @@ const filtered = computed(() =>
   pointer-events: none;
 }
 
-
 .reel-footer {
   display: flex;
   flex-direction: column;
@@ -182,6 +221,50 @@ const filtered = computed(() =>
   white-space: nowrap;
 }
 
-.reel-tag.guitar   { background: #fde8d4; color: #8a4a2a; }
-.reel-tag.climbing { background: #d6f0e0; color: #2a6644; }
+.muted { font-size: 0.9rem; color: #aaa; }
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.admin-form input,
+.admin-form select {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.admin-form input:focus,
+.admin-form select:focus { border-color: rgba(0, 0, 0, 0.4); }
+
+.admin-form button[type="submit"] {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.admin-form button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
+
+.form-msg { font-size: 0.8rem; color: #888; }
 </style>

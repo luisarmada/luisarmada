@@ -5,6 +5,7 @@
       <hr />
       <nav>
         <RouterLink v-for="item in nav" :key="item" :to="'/' + item">{{ item }}</RouterLink>
+        <button v-if="session" class="signout" @click="signOut">sign out</button>
       </nav>
       <hr />
       <RouterView />
@@ -13,7 +14,15 @@
 </template>
 
 <script setup>
+import { useAuth } from './useAuth.js'
+import { supabase } from './supabase.js'
+
 const nav = ['profile', 'projects', 'posts', 'photos', 'plus']
+const { session } = useAuth()
+
+function signOut() {
+  supabase.auth.signOut()
+}
 </script>
 
 <style scoped>
@@ -76,4 +85,17 @@ nav a:not(.router-link-exact-active):hover {
   text-decoration-color: rgba(0, 0, 0, 0.35);
   text-underline-offset: 5px;
 }
+
+.signout {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #bbb;
+  cursor: pointer;
+  padding: 0;
+}
+
+.signout:hover { color: #000; }
 </style>

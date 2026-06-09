@@ -1,5 +1,20 @@
 <template>
   <div class="page">
+    <form v-if="session" class="admin-form" @submit.prevent="submitPhoto">
+      <input v-model="newPhoto.date" type="date" required />
+      <input v-model="newPhoto.caption" type="text" placeholder="caption (optional)" />
+      <input ref="fileInput" type="file" accept="image/*" @change="onFile" required />
+      <div v-if="duplicateWarning" class="duplicate">
+        <p class="form-msg">a photo already exists for this date. replace it?</p>
+        <div class="duplicate-actions">
+          <button type="button" @click="confirmReplace">replace</button>
+          <button type="button" class="cancel-btn" @click="duplicateWarning = false">cancel</button>
+        </div>
+      </div>
+      <button v-else type="submit" :disabled="uploading">{{ uploading ? 'uploading...' : 'add photo' }}</button>
+      <p v-if="photoMsg" class="form-msg">{{ photoMsg }}</p>
+    </form>
+
     <div v-if="loading" class="muted">loading...</div>
     <template v-else>
       <div v-for="{ year, month } in months" :key="`${year}-${month}`" class="month-block">
@@ -39,6 +54,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { supabase } from '../supabase.js'
+import { useAuth } from '../useAuth.js'
 
 const today = new Date()
 const todayStr = today.toDateString()
@@ -48,12 +64,112 @@ const photos = ref([])
 const loading = ref(true)
 const selected = ref(null)
 
-onMounted(async () => {
+const { session } = useAuth()
+
+const uploading = ref(false)
+const photoMsg = ref('')
+const newPhoto = ref({ date: '', caption: '' })
+const photoFile = ref(null)
+const fileInput = ref(null)
+const duplicateWarning = ref(false)
+const existingPhoto = ref(null)
+
+function onFile(e) {
+  photoFile.value = e.target.files[0]
+}
+
+function resizeImage(file, maxWidth, quality) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width)
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width * scale
+      canvas.height = img.height * scale
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(resolve, 'image/jpeg', quality)
+    }
+    img.src = url
+  })
+}
+
+async function submitPhoto() {
+  if (!photoFile.value) return
+  photoMsg.value = ''
+  const { data } = await supabase.from('photos').select('id').eq('date', newPhoto.value.date).single()
+  if (data) {
+    existingPhoto.value = data
+    duplicateWarning.value = true
+    return
+  }
+  await uploadPhoto(false)
+}
+
+async function confirmReplace() {
+  duplicateWarning.value = false
+  await uploadPhoto(true)
+}
+
+async function uploadPhoto(replace) {
+  uploading.value = true
+  photoMsg.value = ''
+  const ts = Date.now()
+  const [full, thumb] = await Promise.all([
+    resizeImage(photoFile.value, 1200, 0.85),
+    resizeImage(photoFile.value, 800, 0.9),
+  ])
+  const fullPath = `${newPhoto.value.date}-${ts}.jpg`
+  const thumbPath = `${newPhoto.value.date}-${ts}-thumb.jpg`
+  const [fullUpload, thumbUpload] = await Promise.all([
+    supabase.storage.from('photos').upload(fullPath, full, { upsert: true, contentType: 'image/jpeg' }),
+    supabase.storage.from('photos').upload(thumbPath, thumb, { upsert: true, contentType: 'image/jpeg' }),
+  ])
+  if (fullUpload.error || thumbUpload.error) {
+    photoMsg.value = `upload error: ${(fullUpload.error || thumbUpload.error).message}`
+    uploading.value = false
+    return
+  }
+  const { data: urlData } = supabase.storage.from('photos').getPublicUrl(fullPath)
+  const { data: thumbUrlData } = supabase.storage.from('photos').getPublicUrl(thumbPath)
+  let dbErr
+  if (replace && existingPhoto.value) {
+    ;({ error: dbErr } = await supabase.from('photos').update({
+      url: urlData.publicUrl,
+      thumb_url: thumbUrlData.publicUrl,
+      caption: newPhoto.value.caption,
+    }).eq('id', existingPhoto.value.id))
+  } else {
+    ;({ error: dbErr } = await supabase.from('photos').insert([{
+      date: newPhoto.value.date,
+      caption: newPhoto.value.caption,
+      url: urlData.publicUrl,
+      thumb_url: thumbUrlData.publicUrl,
+    }]))
+  }
+  if (dbErr) photoMsg.value = `db error: ${dbErr.message}`
+  else {
+    photoMsg.value = 'saved!'
+    newPhoto.value = { date: '', caption: '' }
+    photoFile.value = null
+    existingPhoto.value = null
+    if (fileInput.value) fileInput.value.value = ''
+    await loadPhotos()
+  }
+  uploading.value = false
+}
+
+async function loadPhotos() {
   const { data } = await supabase
     .from('photos')
     .select('*')
     .order('date', { ascending: true })
   if (data) photos.value = data
+}
+
+onMounted(async () => {
+  await loadPhotos()
   loading.value = false
 })
 
@@ -289,4 +405,69 @@ const nextPhoto = computed(() =>
 .nav-btn.next { right: -1.5rem; }
 
 .muted { font-size: 0.9rem; color: #aaa; }
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.admin-form input {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.admin-form input:focus { border-color: rgba(0, 0, 0, 0.4); }
+
+.admin-form button[type="submit"],
+.duplicate-actions button {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.admin-form button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
+
+.duplicate { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.duplicate-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.duplicate-actions button { align-self: unset; }
+
+.cancel-btn {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: #f0f0f0 !important;
+  color: #555 !important;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+.form-msg { font-size: 0.8rem; color: #888; }
 </style>
