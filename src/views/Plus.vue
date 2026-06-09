@@ -11,7 +11,19 @@
         :style="{ background: t.color + '22', color: t.color, borderColor: activeTag === t.name ? t.color : 'transparent' }"
         @click="activeTag = t.name"
       >{{ t.name }}</button>
+      <button v-if="session" class="tags-edit-btn" @click="editingTags = !editingTags">
+        {{ editingTags ? 'done' : 'edit tags' }}
+      </button>
     </div>
+
+    <TagsEditor
+      v-if="session && editingTags"
+      :tags="tags"
+      :tagUsage="tagUsage"
+      :addTag="addTag"
+      :updateTag="updateTag"
+      :deleteTag="deleteTag"
+    />
 
     <form v-if="session" class="admin-form" @submit.prevent="submitReel">
       <input v-model="newReel.shortcode" type="text" placeholder="instagram shortcode (e.g. DWhIavqjDfk)" required />
@@ -52,18 +64,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '../supabase.js'
 import { useTags } from '../useTags.js'
 import { useAuth } from '../useAuth.js'
+import TagsEditor from '../components/TagsEditor.vue'
 
 const reels = ref([])
 const loading = ref(true)
 const activeTag = ref('all')
+const editingTags = ref(false)
 
 const { session } = useAuth()
-const { tags } = useTags('plus')
+const { tags, tagUsage, loadUsage, addTag, updateTag, deleteTag } = useTags('plus', 'plus')
 const availableTags = computed(() => tags.value.map(t => ({ name: t.name, color: t.color })))
+
+watch(editingTags, v => { if (v) loadUsage() })
 
 const filtered = computed(() =>
   activeTag.value === 'all' ? reels.value : reels.value.filter(r => r.tag === activeTag.value)
@@ -143,6 +159,20 @@ onMounted(async () => {
 
 .tag:hover { opacity: 0.75; }
 .tag.active { border-color: currentColor; }
+
+.tags-edit-btn {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  margin-left: auto;
+}
+
+.tags-edit-btn:hover { color: #000; }
 
 .grid {
   display: grid;

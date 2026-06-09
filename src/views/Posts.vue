@@ -5,7 +5,6 @@
       <button
         class="tag"
         :class="{ active: activeTag === 'all' }"
-        :style="activeTag === 'all' ? {} : {}"
         @click="activeTag = 'all'"
       >all</button>
       <button
@@ -16,7 +15,19 @@
         :style="{ background: t.color + '22', color: t.color, borderColor: activeTag === t.name ? t.color : 'transparent' }"
         @click="activeTag = t.name"
       >{{ t.name }}</button>
+      <button v-if="session" class="tags-edit-btn" @click="editingTags = !editingTags">
+        {{ editingTags ? 'done' : 'edit tags' }}
+      </button>
     </div>
+
+    <TagsEditor
+      v-if="session && editingTags"
+      :tags="tags"
+      :tagUsage="tagUsage"
+      :addTag="addTag"
+      :updateTag="updateTag"
+      :deleteTag="deleteTag"
+    />
 
     <form v-if="session" class="admin-form" @submit.prevent="submitPost">
       <input v-model="newPost.title" type="text" placeholder="title" required />
@@ -48,19 +59,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '../supabase.js'
 import { useTags } from '../useTags.js'
 import { useAuth } from '../useAuth.js'
+import TagsEditor from '../components/TagsEditor.vue'
 
 const posts = ref([])
 const loading = ref(true)
 const error = ref(false)
 const activeTag = ref('all')
+const editingTags = ref(false)
 
 const { session } = useAuth()
-const { tags } = useTags('posts')
+const { tags, tagUsage, loadUsage, addTag, updateTag, deleteTag } = useTags('posts', 'posts')
 const availableTags = computed(() => tags.value.map(t => ({ name: t.name, color: t.color })))
+
+watch(editingTags, v => { if (v) loadUsage() })
 
 const filtered = computed(() =>
   activeTag.value === 'all' ? posts.value : posts.value.filter(p => p.tag === activeTag.value)
@@ -148,6 +163,20 @@ onMounted(async () => {
 .tag.review { background: #f5dff5; color: #7a3d7a; }
 
 .tag.active { border-color: currentColor; }
+
+.tags-edit-btn {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  margin-left: auto;
+}
+
+.tags-edit-btn:hover { color: #000; }
 
 .posts {
   display: flex;
