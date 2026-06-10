@@ -38,14 +38,26 @@
       <p v-if="months.length === 0" class="muted">no photos yet.</p>
     </template>
 
-    <div class="lightbox" v-if="selected" @click.self="selected = null">
+    <div class="lightbox" v-if="selected" @click.self="closelightbox">
       <div class="lightbox-inner">
         <img :src="selected.url" loading="lazy" />
         <p class="lightbox-date">{{ formatDate(selected.date) }}</p>
-        <p v-if="selected.caption" class="lightbox-caption">{{ selected.caption }}</p>
-        <button class="close" @click="selected = null">✕</button>
-        <button v-if="prevPhoto" class="nav-btn prev" @click="selected = prevPhoto">‹</button>
-        <button v-if="nextPhoto" class="nav-btn next" @click="selected = nextPhoto">›</button>
+        <template v-if="editingCaption">
+          <div class="caption-edit">
+            <input v-model="captionDraft" type="text" placeholder="caption" class="caption-input" />
+            <div class="caption-actions">
+              <button class="caption-save" @click="saveCaption" :disabled="captionSaving">{{ captionSaving ? 'saving...' : 'save' }}</button>
+              <button class="cancel-btn" @click="editingCaption = false">cancel</button>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <p v-if="selected.caption" class="lightbox-caption">{{ selected.caption }}</p>
+          <button v-if="session" class="edit-caption-btn" @click="startCaptionEdit">{{ selected.caption ? 'edit caption' : 'add caption' }}</button>
+        </template>
+        <button class="close" @click="closelightbox">✕</button>
+        <button v-if="prevPhoto" class="nav-btn prev" @click="selected = prevPhoto; editingCaption = false">‹</button>
+        <button v-if="nextPhoto" class="nav-btn next" @click="selected = nextPhoto; editingCaption = false">›</button>
       </div>
     </div>
   </div>
@@ -233,8 +245,34 @@ function isToday(date) {
   return date.toDateString() === todayStr
 }
 
+const editingCaption = ref(false)
+const captionDraft = ref('')
+const captionSaving = ref(false)
+
 function open(photo) {
   selected.value = photo
+  editingCaption.value = false
+}
+
+function closelightbox() {
+  selected.value = null
+  editingCaption.value = false
+}
+
+function startCaptionEdit() {
+  captionDraft.value = selected.value.caption || ''
+  editingCaption.value = true
+}
+
+async function saveCaption() {
+  captionSaving.value = true
+  const { error } = await supabase.from('photos').update({ caption: captionDraft.value }).eq('id', selected.value.id)
+  if (!error) {
+    selected.value = { ...selected.value, caption: captionDraft.value }
+    await loadPhotos()
+    editingCaption.value = false
+  }
+  captionSaving.value = false
 }
 
 const selectedIndex = computed(() =>
@@ -470,4 +508,72 @@ const nextPhoto = computed(() =>
 }
 
 .form-msg { font-size: 0.8rem; color: #888; }
+
+.edit-caption-btn {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0;
+}
+
+.edit-caption-btn:hover { color: #000; }
+
+.caption-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.caption-input {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.caption-input:focus { border-color: rgba(0, 0, 0, 0.5); }
+
+.caption-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.caption-save {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.caption-save:disabled { opacity: 0.5; cursor: default; }
+
+.cancel-btn {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: #f0f0f0;
+  color: #555;
+  border: none;
+  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
 </style>

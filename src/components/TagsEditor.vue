@@ -71,11 +71,10 @@ const props = defineProps({
 })
 
 const PALETTE = [
-  '#2a5f8a', '#2a6644', '#7a3d7a',
-  '#8a2a2a', '#7a5020', '#6b6b1a',
-  '#1a7a6a', '#8a306a', '#3a3a8a',
-  '#5a6a2a', '#3a5a6a', '#6a3a2a',
-  '#4a2a6a', '#1f7a7a', '#7a4a1a',
+  '#2a5f8a', '#2a6644', '#7a3d7a', '#8a4a2a', '#2a6b6b',
+  '#5a3d8a', '#8a2a4a', '#3d6b2a', '#8a6b2a', '#2a3d8a',
+  '#c0392b', '#16a085', '#8e44ad', '#d35400', '#27ae60',
+  '#2980b9', '#f39c12', '#1abc9c', '#e74c3c', '#6c3483',
 ]
 
 const drafts = ref({})

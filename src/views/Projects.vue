@@ -46,17 +46,40 @@
     <div v-if="loading" class="muted">loading...</div>
     <div v-else-if="error" class="muted">failed to load projects.</div>
     <div v-else class="projects">
-      <a v-for="project in filtered" :key="project.id" class="project" :href="project.link" target="_blank" rel="noopener">
-        <img v-if="project.image_url" :src="project.image_url" class="project-img" />
-        <div class="project-body">
-          <div class="project-header">
-            <span class="project-title">{{ project.title }}</span>
-            <span class="project-date">{{ formatDate(project.date) }}</span>
-            <span class="project-tag" :style="tagStyle(project.tag)">{{ project.tag }}</span>
-          </div>
-          <p class="project-desc">{{ project.description }}</p>
-        </div>
-      </a>
+      <div v-for="project in filtered" :key="project.id" class="project-wrap">
+        <template v-if="editId === project.id">
+          <form class="inline-edit" @submit.prevent="saveProject(project)">
+            <input v-model="editDraft.title" type="text" required />
+            <input v-model="editDraft.description" type="text" required />
+            <input v-model="editDraft.link" type="url" required />
+            <select v-model="editDraft.tag" required>
+              <option value="" disabled>tag</option>
+              <option v-for="t in tags" :key="t.id" :value="t.name">{{ t.name }}</option>
+            </select>
+            <input v-model="editDraft.date" type="date" required />
+            <div class="inline-edit-actions">
+              <button type="submit" :disabled="saving">{{ saving ? 'saving...' : 'save' }}</button>
+              <button type="button" class="cancel-btn" @click="editId = null">cancel</button>
+              <button type="button" class="delete-btn" @click="deleteProject(project.id)">delete</button>
+            </div>
+            <p v-if="editMsg" class="form-msg">{{ editMsg }}</p>
+          </form>
+        </template>
+        <template v-else>
+          <a class="project" :href="project.link" target="_blank" rel="noopener">
+            <img v-if="project.image_url" :src="project.image_url" class="project-img" />
+            <div class="project-body">
+              <div class="project-header">
+                <span class="project-title">{{ project.title }}</span>
+                <span class="project-date">{{ formatDate(project.date) }}</span>
+                <span class="project-tag" :style="tagStyle(project.tag)">{{ project.tag }}</span>
+                <button v-if="session" class="edit-btn" @click.prevent="startEdit(project)">edit</button>
+              </div>
+              <p class="project-desc">{{ project.description }}</p>
+            </div>
+          </a>
+        </template>
+      </div>
       <p v-if="filtered.length === 0" class="muted">no projects yet.</p>
     </div>
   </div>
@@ -92,6 +115,36 @@ function tagStyle(name) {
 
 function formatDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+const editId = ref(null)
+const editDraft = ref({})
+const saving = ref(false)
+const editMsg = ref('')
+
+function startEdit(project) {
+  editId.value = project.id
+  editDraft.value = { title: project.title, description: project.description, link: project.link, tag: project.tag, date: project.date }
+  editMsg.value = ''
+}
+
+async function saveProject(project) {
+  saving.value = true
+  editMsg.value = ''
+  const { error } = await supabase.from('projects').update({ ...editDraft.value }).eq('id', project.id)
+  if (error) editMsg.value = error.message
+  else {
+    editId.value = null
+    await loadProjects()
+  }
+  saving.value = false
+}
+
+async function deleteProject(id) {
+  if (!confirm('delete this project?')) return
+  await supabase.from('projects').delete().eq('id', id)
+  editId.value = null
+  await loadProjects()
 }
 
 const projectUploading = ref(false)
@@ -335,4 +388,69 @@ onMounted(async () => {
 .admin-form button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 .form-msg { font-size: 0.8rem; color: #888; }
+
+.project-wrap { display: contents; }
+
+.edit-btn {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  top: -1px;
+}
+
+.edit-btn:hover { color: #000; }
+
+.inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inline-edit input,
+.inline-edit select {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.inline-edit input:focus,
+.inline-edit select:focus { border-color: rgba(0, 0, 0, 0.4); }
+
+.inline-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.inline-edit-actions button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  background: #000;
+  color: #fff;
+}
+
+.inline-edit-actions button:disabled { opacity: 0.5; cursor: default; }
+
+.cancel-btn { background: #f0f0f0 !important; color: #555 !important; }
+.delete-btn { background: none !important; color: #ccc !important; margin-left: auto; }
+.delete-btn:hover { color: #c00 !important; }
 </style>

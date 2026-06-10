@@ -17,7 +17,7 @@
 import { useAuth } from './useAuth.js'
 import { supabase } from './supabase.js'
 
-const nav = ['profile', 'projects', 'posts', 'photos', 'plus']
+const nav = ['profile', 'projects', 'posts', 'photos']
 const { session } = useAuth()
 
 function signOut() {

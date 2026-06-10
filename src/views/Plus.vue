@@ -40,23 +40,45 @@
     <div v-if="loading" class="muted">loading...</div>
     <div v-else class="grid">
       <div v-for="item in filtered" :key="item.id" class="reel-card">
-        <a :href="`https://www.instagram.com/reel/${item.shortcode}/`" target="_blank" class="reel-cover">
-          <iframe
-            :src="`https://www.instagram.com/reel/${item.shortcode}/embed/captioned/`"
-            frameborder="0"
-            scrolling="no"
-            allowtransparency
-            allowfullscreen
-          ></iframe>
-          <div class="mask-bottom"></div>
-        </a>
-        <div class="reel-footer">
-          <span class="reel-title">{{ item.title }}</span>
-          <div class="reel-meta">
-            <span class="reel-date">{{ formatDate(item.date) }}</span>
-            <span class="reel-tag" :style="tagStyle(item.tag)">{{ item.tag }}</span>
+        <template v-if="editId === item.id">
+          <form class="inline-edit" @submit.prevent="saveReel(item)">
+            <input v-model="editDraft.shortcode" type="text" placeholder="shortcode" required />
+            <input v-model="editDraft.title" type="text" placeholder="title" required />
+            <select v-model="editDraft.tag" required>
+              <option value="" disabled>tag</option>
+              <option v-for="t in tags" :key="t.id" :value="t.name">{{ t.name }}</option>
+            </select>
+            <input v-model="editDraft.date" type="date" required />
+            <div class="inline-edit-actions">
+              <button type="submit" :disabled="saving">{{ saving ? 'saving...' : 'save' }}</button>
+              <button type="button" class="cancel-btn" @click="editId = null">cancel</button>
+              <button type="button" class="delete-btn" @click="deleteReel(item.id)">delete</button>
+            </div>
+            <p v-if="editMsg" class="form-msg">{{ editMsg }}</p>
+          </form>
+        </template>
+        <template v-else>
+          <a :href="`https://www.instagram.com/reel/${item.shortcode}/`" target="_blank" class="reel-cover">
+            <iframe
+              :src="`https://www.instagram.com/reel/${item.shortcode}/embed/captioned/`"
+              frameborder="0"
+              scrolling="no"
+              allowtransparency
+              allowfullscreen
+            ></iframe>
+            <div class="mask-bottom"></div>
+          </a>
+          <div class="reel-footer">
+            <div class="reel-title-row">
+              <span class="reel-title">{{ item.title }}</span>
+              <button v-if="session" class="edit-btn" @click="startEdit(item)">edit</button>
+            </div>
+            <div class="reel-meta">
+              <span class="reel-date">{{ formatDate(item.date) }}</span>
+              <span class="reel-tag" :style="tagStyle(item.tag)">{{ item.tag }}</span>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
       <p v-if="filtered.length === 0" class="muted">no reels yet.</p>
     </div>
@@ -92,6 +114,36 @@ function tagStyle(name) {
 
 function formatDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+const editId = ref(null)
+const editDraft = ref({})
+const saving = ref(false)
+const editMsg = ref('')
+
+function startEdit(item) {
+  editId.value = item.id
+  editDraft.value = { shortcode: item.shortcode, title: item.title, tag: item.tag, date: item.date }
+  editMsg.value = ''
+}
+
+async function saveReel(item) {
+  saving.value = true
+  editMsg.value = ''
+  const { error } = await supabase.from('plus').update({ ...editDraft.value }).eq('id', item.id)
+  if (error) editMsg.value = error.message
+  else {
+    editId.value = null
+    await loadReels()
+  }
+  saving.value = false
+}
+
+async function deleteReel(id) {
+  if (!confirm('delete this reel?')) return
+  await supabase.from('plus').delete().eq('id', id)
+  editId.value = null
+  await loadReels()
 }
 
 const reelSaving = ref(false)
@@ -297,4 +349,71 @@ onMounted(async () => {
 .admin-form button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 .form-msg { font-size: 0.8rem; color: #888; }
+
+.reel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.edit-btn {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0;
+}
+
+.edit-btn:hover { color: #000; }
+
+.inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inline-edit input,
+.inline-edit select {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.35rem 0.55rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.inline-edit input:focus,
+.inline-edit select:focus { border-color: rgba(0, 0, 0, 0.4); }
+
+.inline-edit-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.inline-edit-actions button {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  background: #000;
+  color: #fff;
+}
+
+.inline-edit-actions button:disabled { opacity: 0.5; cursor: default; }
+
+.cancel-btn { background: #f0f0f0 !important; color: #555 !important; }
+.delete-btn { background: none !important; color: #ccc !important; margin-left: auto; }
+.delete-btn:hover { color: #c00 !important; }
 </style>

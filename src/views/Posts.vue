@@ -46,12 +46,33 @@
     <div v-else-if="error" class="muted">failed to load posts.</div>
     <div v-else class="posts">
       <div v-for="post in filtered" :key="post.id" class="post">
-        <div class="post-header">
-          <span class="post-title">{{ post.title }}</span>
-          <span class="post-date">{{ formatDate(post.date) }}</span>
-          <span class="post-tag" :style="tagStyle(post.tag)">{{ post.tag }}</span>
-        </div>
-        <p class="post-desc">{{ post.description }}</p>
+        <template v-if="editId === post.id">
+          <form class="inline-edit" @submit.prevent="savePost(post)">
+            <input v-model="editDraft.title" type="text" required />
+            <input v-model="editDraft.description" type="text" required />
+            <select v-model="editDraft.tag" required>
+              <option value="" disabled>tag</option>
+              <option v-for="t in tags" :key="t.id" :value="t.name">{{ t.name }}</option>
+            </select>
+            <textarea v-model="editDraft.body" rows="4"></textarea>
+            <input v-model="editDraft.date" type="date" required />
+            <div class="inline-edit-actions">
+              <button type="submit" :disabled="saving">{{ saving ? 'saving...' : 'save' }}</button>
+              <button type="button" class="cancel-btn" @click="editId = null">cancel</button>
+              <button type="button" class="delete-btn" @click="deletePost(post.id)">delete</button>
+            </div>
+            <p v-if="editMsg" class="form-msg">{{ editMsg }}</p>
+          </form>
+        </template>
+        <template v-else>
+          <div class="post-header">
+            <span class="post-title">{{ post.title }}</span>
+            <span class="post-date">{{ formatDate(post.date) }}</span>
+            <span class="post-tag" :style="tagStyle(post.tag)">{{ post.tag }}</span>
+            <button v-if="session" class="edit-btn" @click="startEdit(post)">edit</button>
+          </div>
+          <p class="post-desc">{{ post.description }}</p>
+        </template>
       </div>
       <p v-if="filtered.length === 0" class="muted">no posts yet.</p>
     </div>
@@ -88,6 +109,36 @@ function tagStyle(name) {
 
 function formatDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+const editId = ref(null)
+const editDraft = ref({})
+const saving = ref(false)
+const editMsg = ref('')
+
+function startEdit(post) {
+  editId.value = post.id
+  editDraft.value = { title: post.title, description: post.description, tag: post.tag, body: post.body || '', date: post.date }
+  editMsg.value = ''
+}
+
+async function savePost(post) {
+  saving.value = true
+  editMsg.value = ''
+  const { error } = await supabase.from('posts').update({ ...editDraft.value }).eq('id', post.id)
+  if (error) editMsg.value = error.message
+  else {
+    editId.value = null
+    await loadPosts()
+  }
+  saving.value = false
+}
+
+async function deletePost(id) {
+  if (!confirm('delete this post?')) return
+  await supabase.from('posts').delete().eq('id', id)
+  editId.value = null
+  await loadPosts()
 }
 
 const posting = ref(false)
@@ -277,4 +328,71 @@ onMounted(async () => {
 .admin-form button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 .form-msg { font-size: 0.8rem; color: #888; }
+
+.edit-btn {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  top: -1px;
+}
+
+.edit-btn:hover { color: #000; }
+
+.inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inline-edit input,
+.inline-edit select,
+.inline-edit textarea {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  outline: none;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.inline-edit input:focus,
+.inline-edit select:focus,
+.inline-edit textarea:focus { border-color: rgba(0, 0, 0, 0.4); }
+
+.inline-edit textarea { resize: vertical; }
+
+.inline-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.inline-edit-actions button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  background: #000;
+  color: #fff;
+}
+
+.inline-edit-actions button:disabled { opacity: 0.5; cursor: default; }
+
+.cancel-btn { background: #f0f0f0 !important; color: #555 !important; }
+.delete-btn { background: none !important; color: #ccc !important; margin-left: auto; }
+.delete-btn:hover { color: #c00 !important; }
 </style>
